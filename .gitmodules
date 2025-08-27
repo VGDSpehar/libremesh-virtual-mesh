@@ -1,0 +1,3 @@
+[submodule "vwifi"]
+	path = vwifi
+	url = git@github.com:Raizo62/vwifi.git
