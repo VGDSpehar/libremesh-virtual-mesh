@@ -24,7 +24,7 @@ ssh -o UserKnownHostsFile=/dev/null \
 set -eux
 /etc/init.d/vwifi-client stop
 
-uci set vwifi.server_ip='172.16.0.1'
+uci set vwifi.server_ip='$SERVER_IP'
 uci commit vwifi
 
 # Make sure it's executable (scp should keep it executable)
