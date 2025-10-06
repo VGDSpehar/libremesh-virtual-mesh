@@ -13,6 +13,10 @@ VM2_IMAGE="$LIBREMESH_DIR/vm2-overlay.qcow2"
 VM3_IMAGE="$LIBREMESH_DIR/vm3-overlay.qcow2"
 VM_TEST="$LIBREMESH_DIR/vm-test-overlay.qcow2"
 
+# Host IP
+HOST_IP=$(hostname -I | cut -d ' ' -f1)
+[ -n "$HOST_IP" ] || { echo "Couldn't determine the HOST_IP"; exit 1; }
+
 VWIFI_CMD="vwifi-server -u"   # pane 0
 VM1_SSH_PORT=2201             # pane 2
 VM2_SSH_PORT=2202             # pane 3
@@ -139,8 +143,7 @@ $QEMU_BIN \
   -device virtio-net-pci,mac=52:54:00:00:00:01,netdev=mesh0 \
   -netdev user,id=mesh0,net=10.13.0.0/16,hostfwd=tcp::$VM1_SSH_PORT-10.13.00.01:22 \
   -device virtio-net-pci,netdev=wan0 \
-  -netdev user,id=wan0 \
-  -nographic
+  -netdev user,id=wan0
 "
 
   # Pane 2: VM2 (same base; single NIC; SSH fwd on 2202)
@@ -151,8 +154,7 @@ $QEMU_BIN \
   -device virtio-net-pci,mac=52:54:00:00:00:02,netdev=mesh0 \
   -netdev user,id=mesh0,net=10.13.0.0/16,hostfwd=tcp::$VM2_SSH_PORT-10.13.00.02:22 \
   -device virtio-net-pci,netdev=wan0 \
-  -netdev user,id=wan0 \
-  -nographic
+  -netdev user,id=wan0
 "
 # Pane 3: VM2 (same base; single NIC; SSH fwd on 2203)
   send "$(pane 3)" "
@@ -162,8 +164,7 @@ $QEMU_BIN \
   -device virtio-net-pci,mac=52:54:00:00:00:03,netdev=mesh0 \
   -netdev user,id=mesh0,net=10.13.0.0/16,hostfwd=tcp::$VM3_SSH_PORT-10.13.00.03:22 \
   -device virtio-net-pci,netdev=wan0 \
-  -netdev user,id=wan0 \
-  -nographic
+  -netdev user,id=wan0
 "
   # Final focus/attach
   if [[ -n "${TMUX:-}" ]]; then
@@ -174,11 +175,50 @@ $QEMU_BIN \
   fi
 }
 
+wait_for_ssh() {
+  local port=$1
+  echo "Waiting for SSH on port $port"
+  until ssh -o ConnectTimeout=2 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -p "$port" root@127.0.0.1 true 2>/dev/null; do
+  sleep 1
+  done
+  echo "SSH is up on $port"
+}
+
+setup_ssh() {
+  wait_for_ssh $1
+  ssh -o UserKnownHostsFile=/dev/null \
+      -o StrictHostKeyChecking=no \
+      -p $1 root@127.0.0.1 /bin/sh -s "$HOST_IP" <<'EOSSH'
+  set -eux
+  service vwifi-client stop
+  
+  LAST_OCT=$(cat /sys/class/net/eth0/address | cut -d: -f6)
+  
+  uci set vwifi.config.server_ip="$1"
+  uci set vwifi.config.mac_prefix="02:00:00:00:00:${LAST_OCT}"
+  uci set vwifi.config.enabled='1'
+  uci commit vwifi
+  
+  echo "Restarting wireless"
+  service vwifi-client start
+  echo "Restarting"
+  wifi config
+  lime-config
+  wifi down
+  sleep 1
+  wifi up
+EOSSH
+
+}
+
 main() {
   prepare_images
   start_tmux_env
   launch
-  
+  setup_ssh VM1_SSH_PORT
+  setup_ssh VM2_SSH_PORT
+  setup_ssh VM3_SHH_PORT
 }
 
 main "$@"
