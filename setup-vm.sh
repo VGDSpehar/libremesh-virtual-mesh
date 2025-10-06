@@ -28,7 +28,7 @@ echo "Restarting"
 wifi config
 lime-config
 wifi down
-sleep 1
+sleep 7
 wifi up
 EOSSH
 
