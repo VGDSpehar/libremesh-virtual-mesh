@@ -11,7 +11,7 @@ This project aims at providing an easy, lightweight, repeatable and quick to set
 
 Clone this repository in your OpenWRT build directory :
 ```bash
-git clone --recurse-submodules git@github.com:VGDSpehar/libremesh-virtual-mesh.git
+git clone --recurse-submodules https://github.com/VGDSpehar/libremesh-virtual-mesh.git
 ```
 ### Compiling LibreMesh with vwifi :
 
