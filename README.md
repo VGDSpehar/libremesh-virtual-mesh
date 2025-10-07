@@ -53,11 +53,14 @@ then a tmux window should open with 5 different panes. From top left to bottom :
 ## Monitoring and testing
 
 It is possible to add another VM in order to test/monitor the mesh.
-Simply open a new pane, and launch `./libremesh-virtual-mesh/launch-monitoring-vm.sh`
-Then set the VM like before, this time is using port *2204*
 
-In this monitoring VM (or in any other VM) you should be able to observe the star topology of the setup :
+Simply open a new pane, and launch `./libremesh-virtual-mesh/launch-monitoring-vm.sh`
+Then set the VM with :
+`setup-vm.sh 2204`
+
+In this monitoring VM (or in any other VM) you should be able to observe the mesh topology of the setup :
 
 `shared-state-async get wifi_links_info`
 
-You'll see that each VM is connected to the others on their wlan0-mesh interface, forming a mesh. 
+
+You'll see that each VM is connected to the others on their wlan0-mesh interface, forming a mesh.
