@@ -21,9 +21,9 @@ For this testbed to work, you'll need :
 2. Adding the [vwifi-client package](https://github.com/javierbrk/vwifi_cli_package) to your OpenWRT build feeds :
 
 ```bash
-echo 'src-git https://github.com/javierbrk/vwifi_cli_package' >> feeds.conf
+echo 'src-git vwifi https://github.com/javierbrk/vwifi_cli_package' >> feeds.conf
 ./scripts/feeds update -a
-./scrips/feeds install -a
+./scripts/feeds install -a
 ```
 
 Running `make menuconfig` you should now be able to select vwifi for your build configuration.
