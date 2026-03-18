@@ -14,7 +14,7 @@ VM3_IMAGE="$LIBREMESH_DIR/vm3-overlay.qcow2"
 VM_TEST="$LIBREMESH_DIR/vm-test-overlay.qcow2"
 
 # Host IP
-HOST_IP=$(hostname -I | cut -d ' ' -f1)
+HOST_IP=$(ip -f inet address show scope global | grep -Po 'inet \K[\d.]+' | tail -n 1)
 [ -n "$HOST_IP" ] || { echo "Couldn't determine the HOST_IP"; exit 1; }
 
 VWIFI_CMD="vwifi-server -u"   # pane 0
