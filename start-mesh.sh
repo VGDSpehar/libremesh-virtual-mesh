@@ -164,13 +164,6 @@ $QEMU_BIN \
   -device virtio-net-pci,netdev=wan0 \
   -netdev user,id=wan0
 "
-  # Final focus/attach
-  if [[ -n "${TMUX:-}" ]]; then
-    tmux select-window -t "$TARGET"
-    tmux display-message "Launched in window $TARGET"
-  else
-    tmux attach -t "$SESSION"
-  fi
 }
 
 wait_for_ssh() {
@@ -188,6 +181,15 @@ setup_ssh() {
   "$SETUP_VM_CMD" $1
 }
 
+attach() {
+  # Final focus/attach
+  if [[ -n "${TMUX:-}" ]]; then
+    tmux select-window -t "$TARGET"
+    tmux display-message "Launched in window $TARGET"
+  else
+    tmux attach -t "$SESSION"
+  fi
+
 main() {
   prepare_images
   start_tmux_env
@@ -195,6 +197,7 @@ main() {
   setup_ssh $VM1_SSH_PORT
   setup_ssh $VM2_SSH_PORT
   setup_ssh $VM3_SSH_PORT
+  attach
 }
 
 main "$@"
