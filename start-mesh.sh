@@ -5,8 +5,8 @@ set -euo pipefail
 SESSION="libremesh_mesh"         # tmux session name (when starting outside tmux)
 WINDOW="VM_network"                # tmux window name (created inside current session if already in tmux)
 
-BASE_IMAGE_GZ="bin/targets/x86/64/openwrt-x86-64-generic-ext4-combined.img.gz"
-LIBREMESH_DIR="libremesh-virtual-mesh/images"
+BASE_IMAGE_GZ="${BASE_IMAGE_GZ:-bin/targets/x86/64/openwrt-x86-64-generic-ext4-combined.img.gz}"
+LIBREMESH_DIR="${LIBREMESH_DIR:-libremesh-virtual-mesh/images}"
 RAW_IMAGE="$LIBREMESH_DIR/base.img"
 VM1_IMAGE="$LIBREMESH_DIR/vm1-overlay.qcow2"
 VM2_IMAGE="$LIBREMESH_DIR/vm2-overlay.qcow2"
@@ -15,10 +15,10 @@ VM_TEST="$LIBREMESH_DIR/vm-test-overlay.qcow2"
 
 SETUP_VM_CMD=${SETUP_VM_CMD:-libremesh-virtual-mesh/setup-vm.sh}
 
-VWIFI_CMD="vwifi-server -u"   # pane 0
-VM1_SSH_PORT=2201             # pane 2
-VM2_SSH_PORT=2202             # pane 3
-VM3_SSH_PORT=2203             # pane 3
+VWIFI_CMD="${VWIFI_CMD:-vwifi-server -u}"   # pane 0
+VM1_SSH_PORT=2201                           # pane 1
+VM2_SSH_PORT=2202                           # pane 2
+VM3_SSH_PORT=2203                           # pane 3
 
 # QEMU common
 QEMU_BIN="${QEMU_BIN:-qemu-system-x86_64}"
