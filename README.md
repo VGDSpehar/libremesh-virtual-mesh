@@ -9,6 +9,16 @@ This project aims at providing an easy, lightweight, repeatable and quick to set
 
 ## Setup
 
+### Install dependencies
+
+You need to install the `qemu-system-x86` and `qemu-img` components of QEMU. Then you will need to install also `tmux`.
+
+### Clone OpenWrt
+
+For this, follow the instructions on [this page](https://libremesh.org/development.html#compiling_libremesh_from_source_code).
+
+### Clone this repository
+
 Clone this repository in your OpenWRT build directory :
 ```bash
 git clone --recurse-submodules https://github.com/VGDSpehar/libremesh-virtual-mesh.git
@@ -17,7 +27,7 @@ git clone --recurse-submodules https://github.com/VGDSpehar/libremesh-virtual-me
 
 For this testbed to work, you'll need :
 
-1. x86-64 target  (follow these [instructions](https://libremesh.org/development.html#compiling_libremesh_from_source_code))
+1. x86-64 target (follow these [instructions](https://libremesh.org/development.html#compiling_libremesh_from_source_code) specifying `x86` as Target System and `x86_64` as Subtarget)
 2. Adding the [vwifi-client package](https://github.com/javierbrk/vwifi_cli_package) to your OpenWRT build feeds :
 
 ```bash
@@ -26,10 +36,10 @@ echo 'src-git vwifi https://github.com/javierbrk/vwifi_cli_package' >> feeds.con
 ./scripts/feeds install -a
 ```
 
-Running `make menuconfig` you should now be able to select vwifi for your build configuration.
+Running `make menuconfig` you should now be able to select "Network > vwifi" for your build configuration.
 Select it, make sure your target is x86-64 then compile your LibreMesh firmware
 ```bash
-make -j$(nproc+1)
+make -j$(($(nproc)+1))
 ```
 ### Vwifi-server
 
