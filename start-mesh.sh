@@ -5,22 +5,20 @@ set -euo pipefail
 SESSION="libremesh_mesh"         # tmux session name (when starting outside tmux)
 WINDOW="VM_network"                # tmux window name (created inside current session if already in tmux)
 
-BASE_IMAGE_GZ="bin/targets/x86/64/openwrt-x86-64-generic-ext4-combined.img.gz"
-LIBREMESH_DIR="libremesh-virtual-mesh/images"
+BASE_IMAGE_GZ="${BASE_IMAGE_GZ:-bin/targets/x86/64/openwrt-x86-64-generic-ext4-combined.img.gz}"
+LIBREMESH_DIR="${LIBREMESH_DIR:-libremesh-virtual-mesh/images}"
 RAW_IMAGE="$LIBREMESH_DIR/base.img"
 VM1_IMAGE="$LIBREMESH_DIR/vm1-overlay.qcow2"
 VM2_IMAGE="$LIBREMESH_DIR/vm2-overlay.qcow2"
 VM3_IMAGE="$LIBREMESH_DIR/vm3-overlay.qcow2"
 VM_TEST="$LIBREMESH_DIR/vm-test-overlay.qcow2"
 
-# Host IP
-HOST_IP=$(hostname -I | cut -d ' ' -f1)
-[ -n "$HOST_IP" ] || { echo "Couldn't determine the HOST_IP"; exit 1; }
+SETUP_VM_CMD=${SETUP_VM_CMD:-libremesh-virtual-mesh/setup-vm.sh}
 
-VWIFI_CMD="vwifi-server -u"   # pane 0
-VM1_SSH_PORT=2201             # pane 2
-VM2_SSH_PORT=2202             # pane 3
-VM3_SSH_PORT=2203             # pane 3
+VWIFI_CMD="${VWIFI_CMD:-vwifi-server -u}"   # pane 0
+VM1_SSH_PORT=2201                           # pane 1
+VM2_SSH_PORT=2202                           # pane 2
+VM3_SSH_PORT=2203                           # pane 3
 
 # QEMU common
 QEMU_BIN="${QEMU_BIN:-qemu-system-x86_64}"
@@ -166,13 +164,6 @@ $QEMU_BIN \
   -device virtio-net-pci,netdev=wan0 \
   -netdev user,id=wan0
 "
-  # Final focus/attach
-  if [[ -n "${TMUX:-}" ]]; then
-    tmux select-window -t "$TARGET"
-    tmux display-message "Launched in window $TARGET"
-  else
-    tmux attach -t "$SESSION"
-  fi
 }
 
 wait_for_ssh() {
@@ -187,30 +178,17 @@ wait_for_ssh() {
 
 setup_ssh() {
   wait_for_ssh $1
-  ssh -o UserKnownHostsFile=/dev/null \
-      -o StrictHostKeyChecking=no \
-      -p $1 root@127.0.0.1 /bin/sh -s "$HOST_IP" <<'EOSSH'
-  set -eux
-  service vwifi-client stop
-  
-  LAST_OCT=$(cat /sys/class/net/eth0/address | cut -d: -f6)
-  
-  uci set vwifi.config.server_ip="$1"
-  uci set vwifi.config.mac_prefix="02:00:00:00:00:${LAST_OCT}"
-  uci set vwifi.config.enabled='1'
-  uci commit vwifi
-  
-  echo "Restarting wireless"
-  service vwifi-client start
-  echo "Restarting"
-  wifi config
-  lime-config
-  wifi down
-  sleep 7
-  wifi up
-EOSSH
-
+  "$SETUP_VM_CMD" $1
 }
+
+attach() {
+  # Final focus/attach
+  if [[ -n "${TMUX:-}" ]]; then
+    tmux select-window -t "$TARGET"
+    tmux display-message "Launched in window $TARGET"
+  else
+    tmux attach -t "$SESSION"
+  fi
 
 main() {
   prepare_images
@@ -219,6 +197,7 @@ main() {
   setup_ssh $VM1_SSH_PORT
   setup_ssh $VM2_SSH_PORT
   setup_ssh $VM3_SSH_PORT
+  attach
 }
 
 main "$@"
