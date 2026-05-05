@@ -42,6 +42,22 @@ lvm_restore_env_overrides() {
   done
 }
 
+lvm_pwd_looks_like_openwrt_tree() {
+  [[ -x "$PWD/scripts/feeds" || -f "$PWD/feeds.conf" || -f "$PWD/feeds.conf.default" || -d "$PWD/bin/targets" ]]
+}
+
+lvm_guess_openwrt_build_dir() {
+  local repo_parent
+
+  if lvm_pwd_looks_like_openwrt_tree; then
+    printf '%s\n' "$PWD"
+    return 0
+  fi
+
+  repo_parent="$(cd "$LVM_ROOT_DIR/.." && pwd)"
+  printf '%s\n' "$repo_parent"
+}
+
 lvm_load_config() {
   local default_build_dir
 
@@ -76,7 +92,7 @@ lvm_load_config() {
   : "${LVM_ATTACH_TMUX:=1}"
   : "${LVM_MONITOR_HTTP_PORT:=8004}"
 
-  default_build_dir="$(cd "$LVM_ROOT_DIR/.." && pwd)"
+  default_build_dir="$(lvm_guess_openwrt_build_dir)"
   : "${LVM_OPENWRT_BUILD_DIR:=$default_build_dir}"
   : "${LVM_IMAGE_PATH:=$LVM_OPENWRT_BUILD_DIR/bin/targets/x86/64/openwrt-x86-64-generic-ext4-combined.img.gz}"
   : "${LVM_MONITOR_SSH_PORT:=$((LVM_BASE_SSH_PORT + LVM_NODE_COUNT))}"

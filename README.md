@@ -46,13 +46,24 @@ Then enable the `vwifi` package in `make menuconfig`, keep the target on `x86_64
 make -j$(( $(nproc) + 1 ))
 ```
 
-By default the CLI looks for the image at:
+By default the CLI first treats your current working directory as the OpenWrt build root when it looks like an OpenWrt tree, so the common workflow is:
+
+```bash
+cd /path/to/openwrt
+./libremesh-virtual-mesh/bin/lvm start
+```
+
+In that case it looks for the image at:
+
+```text
+./bin/targets/x86/64/openwrt-x86-64-generic-ext4-combined.img.gz
+```
+
+If you run the CLI from somewhere else, it falls back to the repository parent directory. The default image path is therefore usually:
 
 ```text
 ../bin/targets/x86/64/openwrt-x86-64-generic-ext4-combined.img.gz
 ```
-
-relative to this repository, which matches the common layout where the repository is cloned into the OpenWrt build tree.
 
 ## CLI Usage
 
