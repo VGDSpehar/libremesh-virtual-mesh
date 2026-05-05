@@ -56,12 +56,11 @@ lvm_prepare_monitor_image() {
 
 lvm_launch_node_vm() {
   local index="$1"
-  local component guest_ip mac ssh_port overlay_path
+  local component mac ssh_port overlay_path
   local -a command
 
   component="$(lvm_node_name "$index")"
   overlay_path="$(lvm_overlay_path "$component")"
-  guest_ip="$(lvm_node_guest_ip "$index")"
   mac="$(lvm_node_mac "$index")"
   ssh_port="$(lvm_node_ssh_port "$index")"
 
@@ -75,7 +74,8 @@ lvm_launch_node_vm() {
     -nographic
     -drive "file=$overlay_path,if=virtio,format=qcow2"
     -device "virtio-net-pci,mac=$mac,netdev=mesh0"
-    -netdev "user,id=mesh0,net=$LVM_MESH_NETWORK,hostfwd=tcp::${ssh_port}-${guest_ip}:22"
+    # Forward to the guest's sshd without assuming a fixed slirp-assigned IP.
+    -netdev "user,id=mesh0,net=$LVM_MESH_NETWORK,hostfwd=tcp::${ssh_port}-:22"
     -device "virtio-net-pci,netdev=wan0"
     -netdev "$LVM_WAN_NETDEV"
   )
@@ -92,12 +92,11 @@ lvm_start_mesh_nodes() {
 }
 
 lvm_start_monitor_vm() {
-  local component guest_ip mac overlay_path
+  local component mac overlay_path
   local -a command
 
   component="$(lvm_monitor_component_name)"
   overlay_path="$(lvm_overlay_path "$component")"
-  guest_ip="$(lvm_monitor_guest_ip)"
   mac="$(lvm_monitor_mac)"
 
   command=(
@@ -110,7 +109,7 @@ lvm_start_monitor_vm() {
     -nographic
     -drive "file=$overlay_path,if=virtio,format=qcow2"
     -device "virtio-net-pci,mac=$mac,netdev=mesh0"
-    -netdev "user,id=mesh0,net=$LVM_MESH_NETWORK,hostfwd=tcp::${LVM_MONITOR_SSH_PORT}-${guest_ip}:22,hostfwd=tcp::${LVM_MONITOR_HTTP_PORT}-${guest_ip}:80"
+    -netdev "user,id=mesh0,net=$LVM_MESH_NETWORK,hostfwd=tcp::${LVM_MONITOR_SSH_PORT}-:22,hostfwd=tcp::${LVM_MONITOR_HTTP_PORT}-:80"
     -device "virtio-net-pci,netdev=wan0"
     -netdev "$LVM_WAN_NETDEV"
   )
