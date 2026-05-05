@@ -1,34 +1,38 @@
 # libremesh-virtual-mesh
 
-Virtual LibreMesh testbed using for repeatable CI :
+Virtual LibreMesh testbed for repeatable local and CI-style mesh testing with:
+
 - QEMU
-- mac80211_hwsim linux module
+- tmux
 - [vwifi](https://github.com/Raizo62/vwifi)
 
-This project aims at providing an easy, lightweight, repeatable and quick to setup testbed for LibreMesh.
+This project stays shell-based. The current refactor adds a proper CLI, runtime state, and modular Bash libraries without changing the basic workflow of launching `vwifi-server`, booting multiple LibreMesh VMs, and reaching them over forwarded SSH ports.
 
-## Setup
+## Dependencies
 
-### Install dependencies
+Install these commands on the Linux host that will run the testbed:
 
-You need to install the `qemu-system-x86` and `qemu-img` components of QEMU. Then you will need to install also `tmux`.
+- `qemu-system-x86_64`
+- `qemu-img`
+- `tmux`
+- `ssh`
+- `ip`
+- `gzip`
+- `vwifi-server`
 
-### Clone OpenWrt
+`vwifi-server` comes from the upstream vwifi project:
 
-For this, follow the instructions on [this page](https://libremesh.org/development.html#compiling_libremesh_from_source_code).
+- https://github.com/Raizo62/vwifi
 
-### Clone this repository
+## LibreMesh / OpenWrt Build Setup
 
-Clone this repository in your OpenWRT build directory :
+Clone this repository inside your OpenWrt build directory:
+
 ```bash
 git clone --recurse-submodules https://github.com/VGDSpehar/libremesh-virtual-mesh.git
 ```
-### Compiling LibreMesh with vwifi :
 
-For this testbed to work, you'll need :
-
-1. x86-64 target (follow these [instructions](https://libremesh.org/development.html#compiling_libremesh_from_source_code) specifying `x86` as Target System and `x86_64` as Subtarget)
-2. Adding the [vwifi-client package](https://github.com/javierbrk/vwifi_cli_package) to your OpenWRT build feeds :
+Build a LibreMesh/OpenWrt `x86_64` image. Follow the LibreMesh development instructions and add the `vwifi-client` package feed:
 
 ```bash
 echo 'src-git vwifi https://github.com/javierbrk/vwifi_cli_package' >> feeds.conf
@@ -36,41 +40,190 @@ echo 'src-git vwifi https://github.com/javierbrk/vwifi_cli_package' >> feeds.con
 ./scripts/feeds install -a
 ```
 
-Running `make menuconfig` you should now be able to select "Network > vwifi" for your build configuration.
-Select it, make sure your target is x86-64 then compile your LibreMesh firmware
-```bash
-make -j$(($(nproc)+1))
-```
-### Vwifi-server
-
-Follow the instructions from the [repository](https://github.com/Raizo62/vwifi) in order to have vwifi-server.
-
-## Running the virtual mesh
-
-From your OpenWRT build directory
+Then enable the `vwifi` package in `make menuconfig`, keep the target on `x86_64`, and build:
 
 ```bash
-./libremesh-virtual-mesh/start-mesh.sh
+make -j$(( $(nproc) + 1 ))
 ```
 
-then a tmux window should open with 5 different panes. From top left to bottom :
-0. vwifi-server : this is the server that will relay the wifi frames across each virtual machines
-1. LiMe-000001 listening on port *2201*
-2. LiMe-000002 listening on port *2202*
-3. LiMe-000003 listening on port *2203*
-5. A standard shell that will help you setup/monitor the mesh
+By default the CLI looks for the image at:
 
-## Monitoring and testing
+```text
+../bin/targets/x86/64/openwrt-x86-64-generic-ext4-combined.img.gz
+```
 
-It is possible to add another VM in order to test/monitor the mesh.
+relative to this repository, which matches the common layout where the repository is cloned into the OpenWrt build tree.
 
-Simply open a new pane, and launch `./libremesh-virtual-mesh/launch-monitoring-vm.sh`
-Then set the VM with :
-`setup-vm.sh 2204`
+## CLI Usage
 
-In this monitoring VM (or in any other VM) you should be able to observe the mesh topology of the setup :
+The new entrypoint is:
 
-`shared-state-async get wifi_links_info`
+```bash
+./bin/lvm help
+```
 
+Main commands:
 
-You'll see that each VM is connected to the others on their wlan0-mesh interface, forming a mesh.
+```bash
+./bin/lvm start
+./bin/lvm stop
+./bin/lvm status
+./bin/lvm clean
+./bin/lvm help
+```
+
+Compatibility wrappers are still available:
+
+```bash
+./start-mesh.sh
+./setup-vm.sh 2201
+./launch-monitoring-vm.sh
+```
+
+## Starting The Mesh
+
+From anywhere on the filesystem:
+
+```bash
+/path/to/libremesh-virtual-mesh/bin/lvm start
+```
+
+What `start` does:
+
+- validates configuration
+- checks required host dependencies
+- prepares runtime directories in `/tmp/libremesh-virtual-mesh`
+- decompresses the OpenWrt image and creates per-node QCOW2 overlays
+- starts `vwifi-server`
+- launches the requested number of LibreMesh VMs
+- configures each node over SSH
+- opens or reuses a tmux session for log monitoring
+
+By default this starts:
+
+- `node-1` on SSH port `2201`
+- `node-2` on SSH port `2202`
+- `node-3` on SSH port `2203`
+
+## Status, Stop, And Clean
+
+Show the current state:
+
+```bash
+./bin/lvm status
+```
+
+Stop the VMs and `vwifi-server` started by this project:
+
+```bash
+./bin/lvm stop
+```
+
+Remove this project's runtime state only:
+
+```bash
+./bin/lvm clean
+```
+
+`clean` only removes the runtime directory. It does not touch your OpenWrt build artifacts.
+
+## Configuration
+
+The CLI works without a config file. Defaults live in `config/default.conf`.
+
+Optional overrides can be supplied with:
+
+- environment variables
+- `config/local.conf`
+
+Useful environment variables:
+
+- `LVM_NODE_COUNT`
+- `LVM_BASE_SSH_PORT`
+- `LVM_OPENWRT_BUILD_DIR`
+- `LVM_IMAGE_PATH`
+- `LVM_RUNTIME_DIR`
+- `LVM_TMUX_SESSION`
+- `LVM_VM_MEMORY`
+- `LVM_VM_CPUS`
+
+Examples:
+
+```bash
+LVM_NODE_COUNT=5 ./bin/lvm start
+LVM_BASE_SSH_PORT=2301 ./bin/lvm start
+LVM_OPENWRT_BUILD_DIR=/path/to/openwrt ./bin/lvm start
+LVM_RUNTIME_DIR=/tmp/lvm-test ./bin/lvm start
+```
+
+To create a local project config:
+
+```bash
+cp config/local.conf.example config/local.conf
+```
+
+## Runtime Layout
+
+Runtime files are stored under:
+
+```text
+/tmp/libremesh-virtual-mesh
+```
+
+Important paths:
+
+- `logs/node-1.log`
+- `logs/node-2.log`
+- `logs/node-3.log`
+- `logs/vwifi-server.log`
+- `logs/monitor.log`
+- `pids/`
+- `disks/`
+- `state/`
+
+## SSH Access
+
+After `start`, connect to a node with:
+
+```bash
+ssh root@127.0.0.1 -p 2201
+```
+
+Adjust the port for the node you want.
+
+## Monitoring VM
+
+The monitoring VM helper is still available:
+
+```bash
+./bin/lvm start-monitor
+```
+
+This launches a separate monitoring VM with:
+
+- SSH forwarded on `2204` by default
+- HTTP forwarded on `8004` by default
+
+To configure it once SSH is reachable:
+
+```bash
+./bin/lvm setup-vm 2204
+```
+
+Inside a node or monitoring VM you can inspect the mesh, for example:
+
+```bash
+shared-state-async get wifi_links_info
+```
+
+## Development
+
+Optional helper targets:
+
+```bash
+make lint
+make start
+make stop
+make status
+make clean
+```

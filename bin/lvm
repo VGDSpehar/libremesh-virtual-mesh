@@ -1,0 +1,258 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+LVM_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LVM_ROOT_DIR="$(cd "$LVM_BIN_DIR/.." && pwd)"
+
+# shellcheck source=lib/common.sh
+source "$LVM_ROOT_DIR/lib/common.sh"
+# shellcheck source=lib/config.sh
+source "$LVM_ROOT_DIR/lib/config.sh"
+# shellcheck source=lib/runtime.sh
+source "$LVM_ROOT_DIR/lib/runtime.sh"
+# shellcheck source=lib/deps.sh
+source "$LVM_ROOT_DIR/lib/deps.sh"
+# shellcheck source=lib/vwifi.sh
+source "$LVM_ROOT_DIR/lib/vwifi.sh"
+# shellcheck source=lib/qemu.sh
+source "$LVM_ROOT_DIR/lib/qemu.sh"
+# shellcheck source=lib/tmux.sh
+source "$LVM_ROOT_DIR/lib/tmux.sh"
+
+lvm_usage() {
+  cat <<EOF
+Usage: $(basename "$0") <command>
+
+Commands:
+  start          Start the virtual LibreMesh mesh
+  stop           Stop VMs and vwifi-server started by this tool
+  status         Show runtime status, ports, logs, and tmux target
+  clean          Stop the mesh and remove this project's runtime files
+  help           Show this help
+
+Compatibility commands:
+  setup-vm PORT      Configure a VM over SSH on the given forwarded port
+  start-monitor      Launch the monitoring VM on port ${LVM_MONITOR_SSH_PORT:-2204}
+EOF
+}
+
+lvm_load_runtime_context() {
+  lvm_load_config
+  lvm_runtime_load_state_if_present
+}
+
+lvm_stop_components() {
+  local index component
+
+  component="$(lvm_monitor_component_name)"
+  lvm_stop_component "$component" || true
+
+  for ((index = LVM_NODE_COUNT; index >= 1; index--)); do
+    component="$(lvm_node_name "$index")"
+    lvm_stop_component "$component" || true
+  done
+
+  lvm_stop_vwifi || true
+
+  if command -v tmux >/dev/null 2>&1; then
+    lvm_tmux_kill_target_if_present "${LVM_TMUX_TARGET:-}" || true
+  fi
+}
+
+lvm_cmd_start() {
+  local index target
+
+  lvm_load_config
+  lvm_validate_config
+  lvm_prepare_runtime_dirs
+
+  if [[ -f "$LVM_STATE_FILE" ]]; then
+    lvm_runtime_load_state_if_present
+    lvm_cleanup_stale_runtime
+    if lvm_any_component_running; then
+      lvm_die "A mesh appears to already be running in $LVM_RUNTIME_DIR. Use './bin/lvm status' or './bin/lvm stop'."
+    fi
+
+    lvm_load_config
+    lvm_validate_config
+    lvm_prepare_runtime_dirs
+  fi
+
+  lvm_cleanup_stale_runtime
+
+  if lvm_any_component_running; then
+    lvm_die "A mesh appears to already be running in $LVM_RUNTIME_DIR. Use './bin/lvm status' or './bin/lvm stop'."
+  fi
+
+  lvm_check_start_dependencies
+  lvm_prepare_runtime_logs
+  lvm_prepare_vm_images
+
+  if ! lvm_start_vwifi; then
+    lvm_die "Failed to start vwifi-server. Check $(lvm_log_file vwifi-server)."
+  fi
+
+  if ! lvm_start_mesh_nodes; then
+    lvm_warn "Node startup failed; stopping started components."
+    lvm_stop_components
+    lvm_die "Mesh startup failed."
+  fi
+
+  for ((index = 1; index <= LVM_NODE_COUNT; index++)); do
+    if ! lvm_setup_vm_by_port "$(lvm_node_ssh_port "$index")"; then
+      lvm_warn "Node setup failed; stopping started components."
+      lvm_stop_components
+      lvm_die "Failed to configure $(lvm_node_name "$index")."
+    fi
+  done
+
+  target="$(lvm_tmux_create_mesh_window)"
+  LVM_TMUX_TARGET="$target"
+  lvm_save_state
+
+  lvm_print_start_summary
+  lvm_tmux_attach_or_select "$target"
+}
+
+lvm_cmd_stop() {
+  lvm_load_runtime_context
+  lvm_stop_components
+  lvm_save_state
+  lvm_log "Stopped runtime processes for $LVM_RUNTIME_DIR"
+}
+
+lvm_cmd_status() {
+  local index component pid status port log_path
+
+  lvm_load_runtime_context
+
+  printf 'Runtime directory: %s\n' "$LVM_RUNTIME_DIR"
+  printf 'Logs directory: %s\n' "$LVM_LOG_DIR"
+
+  component="vwifi-server"
+  if pid="$(lvm_component_pid "$component")"; then
+    status="running"
+  else
+    pid="-"
+    status="stopped"
+  fi
+  printf 'vwifi-server: %s (pid: %s, log: %s)\n' "$status" "$pid" "$(lvm_log_file "$component")"
+
+  printf 'Nodes: %s\n' "$LVM_NODE_COUNT"
+  for ((index = 1; index <= LVM_NODE_COUNT; index++)); do
+    component="$(lvm_node_name "$index")"
+    port="$(lvm_node_ssh_port "$index")"
+    log_path="$(lvm_log_file "$component")"
+    if pid="$(lvm_component_pid "$component")"; then
+      status="running"
+    else
+      pid="-"
+      status="stopped"
+    fi
+    printf '  %s: %s (ssh: root@127.0.0.1 -p %s, pid: %s, log: %s)\n' \
+      "$component" "$status" "$port" "$pid" "$log_path"
+  done
+
+  component="$(lvm_monitor_component_name)"
+  if pid="$(lvm_component_pid "$component")"; then
+    status="running"
+  else
+    pid="-"
+    status="stopped"
+  fi
+  printf 'Monitor VM: %s (ssh: root@127.0.0.1 -p %s, pid: %s, log: %s)\n' \
+    "$status" "$LVM_MONITOR_SSH_PORT" "$pid" "$(lvm_log_file "$component")"
+
+  if command -v tmux >/dev/null 2>&1 && lvm_tmux_target_is_active "${LVM_TMUX_TARGET:-}"; then
+    printf 'tmux target: %s\n' "$LVM_TMUX_TARGET"
+  elif [[ -n "${LVM_TMUX_TARGET:-}" ]]; then
+    printf 'tmux target: %s (inactive)\n' "$LVM_TMUX_TARGET"
+  else
+    printf 'tmux target: none\n'
+  fi
+}
+
+lvm_cmd_clean() {
+  lvm_load_runtime_context
+  lvm_stop_components
+  lvm_remove_runtime_dir
+  lvm_log "Removed runtime directory $LVM_RUNTIME_DIR"
+}
+
+lvm_cmd_setup_vm() {
+  lvm_load_config
+  lvm_validate_config
+  lvm_check_setup_dependencies
+  lvm_setup_vm_by_port "${1:-}"
+}
+
+lvm_cmd_start_monitor() {
+  lvm_load_runtime_context
+  lvm_validate_config
+  lvm_prepare_runtime_dirs
+  lvm_check_monitor_dependencies
+  lvm_prepare_component_log "$(lvm_monitor_component_name)"
+  lvm_prepare_monitor_image
+  lvm_start_monitor_vm
+  lvm_save_state
+  printf 'Monitoring VM started.\n'
+  printf 'SSH: ssh root@127.0.0.1 -p %s\n' "$LVM_MONITOR_SSH_PORT"
+  printf 'HTTP: http://127.0.0.1:%s/\n' "$LVM_MONITOR_HTTP_PORT"
+  printf 'Log: %s\n' "$(lvm_log_file "$(lvm_monitor_component_name)")"
+  printf 'Run ./bin/lvm setup-vm %s after SSH is reachable.\n' "$LVM_MONITOR_SSH_PORT"
+}
+
+lvm_print_start_summary() {
+  local index
+
+  printf 'Mesh started.\n'
+  printf 'Runtime directory: %s\n' "$LVM_RUNTIME_DIR"
+  printf 'tmux target: %s\n' "${LVM_TMUX_TARGET:-none}"
+  for ((index = 1; index <= LVM_NODE_COUNT; index++)); do
+    printf 'SSH %s: ssh root@127.0.0.1 -p %s\n' \
+      "$(lvm_node_name "$index")" "$(lvm_node_ssh_port "$index")"
+  done
+  printf 'vwifi log: %s\n' "$(lvm_log_file vwifi-server)"
+}
+
+main() {
+  local command="${1:-help}"
+
+  case "$command" in
+    start)
+      shift
+      lvm_cmd_start "$@"
+      ;;
+    stop)
+      shift
+      lvm_cmd_stop "$@"
+      ;;
+    status)
+      shift
+      lvm_cmd_status "$@"
+      ;;
+    clean)
+      shift
+      lvm_cmd_clean "$@"
+      ;;
+    setup-vm)
+      shift
+      lvm_cmd_setup_vm "$@"
+      ;;
+    start-monitor)
+      shift
+      lvm_cmd_start_monitor "$@"
+      ;;
+    help|-h|--help)
+      lvm_load_config
+      lvm_usage
+      ;;
+    *)
+      lvm_load_config
+      lvm_usage >&2
+      lvm_die "Unknown command: $command"
+      ;;
+  esac
+}
+
+main "$@"

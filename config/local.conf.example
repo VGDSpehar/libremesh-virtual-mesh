@@ -1,0 +1,12 @@
+# shellcheck shell=bash
+#
+# Copy this file to config/local.conf and adjust values as needed.
+
+# LVM_NODE_COUNT=4
+# LVM_BASE_SSH_PORT=2201
+# LVM_RUNTIME_DIR=/tmp/libremesh-virtual-mesh
+# LVM_TMUX_SESSION=libremesh_mesh
+# LVM_VM_MEMORY=512
+# LVM_VM_CPUS=2
+# LVM_OPENWRT_BUILD_DIR=/home/user/src/openwrt
+# LVM_IMAGE_PATH=/home/user/src/openwrt/bin/targets/x86/64/openwrt-x86-64-generic-ext4-combined.img.gz

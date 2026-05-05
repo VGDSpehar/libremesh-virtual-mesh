@@ -1,13 +1,10 @@
-qemu-system-x86_64 \
-	-enable-kvm \
-	-M q35 \
-	-cpu host \
-	-smp 2 \
-	-m 512M \
-	-nographic   \
-	-drive file=./libremesh-virtual-mesh/images/vm-test-overlay.qcow2,if=virtio,format=qcow2 \
-	-device virtio-net-pci,mac=52:54:00:00:00:04,netdev=mesh0 \
-	-netdev user,id=mesh0,net=10.13.0.0/16,hostfwd=tcp::2204-10.13.00.04:22,hostfwd=tcp::8004-10.13.00.04:80 \
-	-device virtio-net-pci,netdev=wan0 \
-	-netdev user,id=wan0 \
-	-nographic
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ "$#" -eq 0 ]]; then
+  exec "$SCRIPT_DIR/bin/lvm" start-monitor
+fi
+
+exec "$SCRIPT_DIR/bin/lvm" "$@"
