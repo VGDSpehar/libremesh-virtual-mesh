@@ -23,12 +23,20 @@ lvm_capture_env_overrides() {
   LVM_CAPTURED_OVERRIDE_VARS=()
   LVM_CAPTURED_OVERRIDE_VALUES=()
 
-  local var_name
+  local var_name env_value
   for var_name in "${LVM_CONFIG_OVERRIDE_VARS[@]}"; do
-    if [[ -v "$var_name" ]]; then
+    if env_value="$(printenv "$var_name" 2>/dev/null)"; then
       LVM_CAPTURED_OVERRIDE_VARS+=("$var_name")
-      LVM_CAPTURED_OVERRIDE_VALUES+=("${!var_name}")
+      LVM_CAPTURED_OVERRIDE_VALUES+=("$env_value")
     fi
+  done
+}
+
+lvm_reset_config_vars() {
+  local var_name
+
+  for var_name in "${LVM_CONFIG_OVERRIDE_VARS[@]}"; do
+    unset "$var_name" || true
   done
 }
 
@@ -62,6 +70,7 @@ lvm_load_config() {
   local default_build_dir
 
   lvm_capture_env_overrides
+  lvm_reset_config_vars
 
   LVM_PROJECT_NAME="libremesh-virtual-mesh"
   LVM_CONFIG_DIR="$LVM_ROOT_DIR/config"
